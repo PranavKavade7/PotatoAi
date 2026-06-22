@@ -58,34 +58,50 @@ export async function POST(req: Request) {
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-  const result = await model.generateContentStream({
-    contents: [{ role: 'user', parts: [{ text: query }] }],
-    systemInstruction: systemPrompt,
-  });
+  try {
+    const result = await model.generateContentStream({
+      contents: [{ role: 'user', parts: [{ text: query }] }],
+      systemInstruction: systemPrompt,
+    });
 
-  const readableStream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      try {
-        for await (const chunk of result.stream) {
-          const text = chunk.text();
-          if (text) {
-            controller.enqueue(encoder.encode(text));
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        try {
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) {
+              controller.enqueue(encoder.encode(text));
+            }
           }
+          controller.close();
+        } catch (err) {
+          controller.error(err);
         }
-        controller.close();
-      } catch (err) {
-        controller.error(err);
-      }
-    },
-  });
+      },
+    });
 
-  return new Response(readableStream, {
-    headers: {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'Transfer-Encoding': 'chunked',
-    },
-  });
+    return new Response(readableStream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+      },
+    });
+  } catch (err: any) {
+    const msg = err?.message || '';
+    if (msg.includes('429') || msg.includes('quota') || msg.includes('rate limit') || msg.includes('exceeded')) {
+      const fallback = `I'm Potato AI, your AI expert on AIPulse! Right now, I'm experiencing high demand and my AI brain is taking a quick breather. Please try again in a minute or two.
+
+RELATED:
+• What is the best free AI tool in India?
+• How do I start using AI for writing?
+• ChatGPT vs Gemini — which is cheaper?`;
+      return new Response(fallback, {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      });
+    }
+    return new Response('Something went wrong. Please try again.', { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
 }

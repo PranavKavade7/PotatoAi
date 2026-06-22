@@ -15,8 +15,9 @@ function Navigation() {
         <Link href="/" style={{ fontSize: 20, fontWeight: 700, color: '#1a1a1a', textDecoration: 'none' }}>
           PotatoAi
         </Link>
-        <div style={{ display: 'flex', gap: 24 }}>
+        <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
           <Link href="/news" style={{ fontSize: 14, color: '#1a1a1a', textDecoration: 'none' }}>News</Link>
+          <Link href="/potato-ai" style={{ fontSize: 14, color: '#1877F2', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 6, background: '#E7F0FD' }}>Potato AI</Link>
           <Link href="/models" style={{ fontSize: 14, color: '#1a1a1a', textDecoration: 'none' }}>Models</Link>
           <Link href="/companies" style={{ fontSize: 14, color: '#1a1a1a', textDecoration: 'none' }}>Companies</Link>
           <Link href="/glossary" style={{ fontSize: 14, color: '#1a1a1a', textDecoration: 'none' }}>Glossary</Link>

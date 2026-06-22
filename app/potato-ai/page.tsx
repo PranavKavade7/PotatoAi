@@ -33,8 +33,12 @@ export default function PotatoAIPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [suggested] = useState(() => shuffleArray(SUGGESTED_QUESTIONS).slice(0, 4));
+  const [suggested, setSuggested] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSuggested(shuffleArray(SUGGESTED_QUESTIONS).slice(0, 4));
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

@@ -87,7 +87,11 @@ function usePotatoAI() {
 
 function PotatoAIHero({ onAsk }: { onAsk: (q: string) => void }) {
   const [query, setQuery] = useState('');
-  const [suggested] = useState(() => shuffleArray(SUGGESTED_QUESTIONS).slice(0, 4));
+  const [suggested, setSuggested] = useState<string[]>([]);
+
+  useEffect(() => {
+    setSuggested(shuffleArray(SUGGESTED_QUESTIONS).slice(0, 4));
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

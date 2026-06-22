@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, type Company } from '@/lib/supabase';
 
-const TABS = ['News', 'Models', 'Companies', 'Glossary', 'Newsletter'];
+const TABS = ['News', 'Models', 'Companies', 'Glossary', 'Deals', 'Newsletter'];
 
 type Subscriber = {
   id: string;
@@ -32,8 +32,11 @@ export default function AdminPage() {
   const [modelForm, setModelForm] = useState({ name: '', company_id: '', description: '', use_cases: '', pricing_type: 'free', pricing_detail: '', context_window: '', benchmark_score: '', official_url: '', launched_at: '' });
   const [companyForm, setCompanyForm] = useState({ name: '', country: '', founded_year: '', description: '', website: '' });
   const [glossaryForm, setGlossaryForm] = useState({ term: '', definition: '', example: '', category: 'basics' });
+  const [dealForm, setDealForm] = useState({ tool_name: '', company: '', deal_title: '', deal_description: '', original_price: '', deal_price: '', discount_percent: '', deal_type: 'free_trial', deal_url: '', valid_until: '', is_verified: false, is_featured: false });
 
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [pendingDeals, setPendingDeals] = useState<any[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
 
   useEffect(() => {
     const auth = document.cookie.includes('admin_auth=true');
@@ -44,6 +47,9 @@ export default function AdminPage() {
     if (!authenticated) return;
     if (activeTab === 'Newsletter') {
       fetchSubscribers();
+    } else if (activeTab === 'Deals') {
+      fetchData();
+      fetchPendingDeals();
     } else {
       fetchData();
     }
@@ -67,6 +73,9 @@ export default function AdminPage() {
         break;
       case 'Glossary':
         query = supabase.from('glossary').select('*').order('term');
+        break;
+      case 'Deals':
+        query = supabase.from('deals').select('*').order('is_featured', { ascending: false }).order('created_at', { ascending: false });
         break;
       default:
         query = supabase.from('news').select('*');
@@ -103,6 +112,7 @@ export default function AdminPage() {
     setModelForm({ name: '', company_id: '', description: '', use_cases: '', pricing_type: 'free', pricing_detail: '', context_window: '', benchmark_score: '', official_url: '', launched_at: '' });
     setCompanyForm({ name: '', country: '', founded_year: '', description: '', website: '' });
     setGlossaryForm({ term: '', definition: '', example: '', category: 'basics' });
+    setDealForm({ tool_name: '', company: '', deal_title: '', deal_description: '', original_price: '', deal_price: '', discount_percent: '', deal_type: 'free_trial', deal_url: '', valid_until: '', is_verified: false, is_featured: false });
     setEditingId(null);
     setShowForm(false);
   }
@@ -134,6 +144,14 @@ export default function AdminPage() {
         table = 'glossary';
         payload = { ...glossaryForm };
         break;
+      case 'Deals':
+        table = 'deals';
+        payload = {
+          ...dealForm,
+          discount_percent: dealForm.discount_percent ? parseInt(dealForm.discount_percent) : null,
+          valid_until: dealForm.valid_until || null,
+        };
+        break;
     }
 
     if (editingId) {
@@ -154,9 +172,38 @@ export default function AdminPage() {
       case 'Models': table = 'models'; break;
       case 'Companies': table = 'companies'; break;
       case 'Glossary': table = 'glossary'; break;
+      case 'Deals': table = 'deals'; break;
     }
     await supabase.from(table).delete().eq('id', id);
     fetchData();
+  }
+
+  async function fetchPendingDeals() {
+    setPendingLoading(true);
+    const { data } = await supabase.from('pending_deals').select('*').eq('status', 'pending').order('created_at', { ascending: false });
+    setPendingDeals(data || []);
+    setPendingLoading(false);
+  }
+
+  async function approvePendingDeal(pending: any) {
+    const { tool_name, deal_url, deal_description } = pending;
+    await supabase.from('deals').insert({
+      tool_name,
+      deal_title: tool_name + ' Deal',
+      deal_description: deal_description || '',
+      deal_url: deal_url || '',
+      deal_type: 'discount',
+      is_verified: false,
+      is_featured: false,
+    });
+    await supabase.from('pending_deals').update({ status: 'approved' }).eq('id', pending.id);
+    fetchPendingDeals();
+    fetchData();
+  }
+
+  async function rejectPendingDeal(id: string) {
+    await supabase.from('pending_deals').update({ status: 'rejected' }).eq('id', id);
+    fetchPendingDeals();
   }
 
   function handleEdit(item: any) {
@@ -185,6 +232,22 @@ export default function AdminPage() {
         break;
       case 'Glossary':
         setGlossaryForm({ term: item.term, definition: item.definition, example: item.example || '', category: item.category || 'basics' });
+        break;
+      case 'Deals':
+        setDealForm({
+          tool_name: item.tool_name,
+          company: item.company || '',
+          deal_title: item.deal_title,
+          deal_description: item.deal_description || '',
+          original_price: item.original_price || '',
+          deal_price: item.deal_price || '',
+          discount_percent: item.discount_percent?.toString() || '',
+          deal_type: item.deal_type || 'free_trial',
+          deal_url: item.deal_url || '',
+          valid_until: item.valid_until || '',
+          is_verified: item.is_verified || false,
+          is_featured: item.is_featured || false,
+        });
         break;
     }
   }
@@ -281,6 +344,128 @@ export default function AdminPage() {
           </button>
         ))}
       </div>
+
+      {activeTab === 'Deals' && (
+        <div>
+          <button
+            onClick={() => { resetForms(); setShowForm(!showForm); }}
+            style={{ fontSize: 14, fontWeight: 600, padding: '8px 16px', borderRadius: 4, background: '#1877F2', color: '#fff', border: 'none', cursor: 'pointer', marginBottom: 16 }}
+          >
+            {showForm ? 'Cancel' : editingId ? 'Edit Form' : 'Add New Deal'}
+          </button>
+
+          {showForm && (
+            <form onSubmit={handleSubmit} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 20, marginBottom: 24, background: '#fff' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <input required placeholder="Tool name" value={dealForm.tool_name} onChange={(e) => setDealForm({ ...dealForm, tool_name: e.target.value })} style={{ fontSize: 14, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 4, outline: 'none' }} />
+                <input placeholder="Company" value={dealForm.company} onChange={(e) => setDealForm({ ...dealForm, company: e.target.value })} style={{ fontSize: 14, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 4, outline: 'none' }} />
+                <input required placeholder="Deal title" value={dealForm.deal_title} onChange={(e) => setDealForm({ ...dealForm, deal_title: e.target.value })} style={{ fontSize: 14, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 4, outline: 'none' }} />
+                <textarea placeholder="Deal description" value={dealForm.deal_description} onChange={(e) => setDealForm({ ...dealForm, deal_description: e.target.value })} rows={2} style={{ fontSize: 14, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 4, outline: 'none', resize: 'vertical' }} />
+                <input placeholder="Original price" value={dealForm.original_price} onChange={(e) => setDealForm({ ...dealForm, original_price: e.target.value })} style={{ fontSize: 14, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 4, outline: 'none' }} />
+                <input placeholder="Deal price" value={dealForm.deal_price} onChange={(e) => setDealForm({ ...dealForm, deal_price: e.target.value })} style={{ fontSize: 14, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 4, outline: 'none' }} />
+                <input placeholder="Discount %" value={dealForm.discount_percent} onChange={(e) => setDealForm({ ...dealForm, discount_percent: e.target.value })} style={{ fontSize: 14, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 4, outline: 'none' }} />
+                <select value={dealForm.deal_type} onChange={(e) => setDealForm({ ...dealForm, deal_type: e.target.value })} style={{ fontSize: 14, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 4, outline: 'none' }}>
+                  <option value="free_trial">Free Trial</option>
+                  <option value="student">Student</option>
+                  <option value="india_price">India Price</option>
+                  <option value="lifetime">Lifetime</option>
+                  <option value="discount">Discount</option>
+                  <option value="free_tier">Free Tier</option>
+                </select>
+                <input placeholder="Deal URL" value={dealForm.deal_url} onChange={(e) => setDealForm({ ...dealForm, deal_url: e.target.value })} style={{ fontSize: 14, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 4, outline: 'none' }} />
+                <input type="date" placeholder="Valid until" value={dealForm.valid_until} onChange={(e) => setDealForm({ ...dealForm, valid_until: e.target.value })} style={{ fontSize: 14, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 4, outline: 'none' }} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={dealForm.is_verified} onChange={(e) => setDealForm({ ...dealForm, is_verified: e.target.checked })} />
+                  Verified
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={dealForm.is_featured} onChange={(e) => setDealForm({ ...dealForm, is_featured: e.target.checked })} />
+                  Featured
+                </label>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <button type="submit" style={{ fontSize: 14, fontWeight: 600, padding: '10px 20px', borderRadius: 4, background: '#1877F2', color: '#fff', border: 'none', cursor: 'pointer' }}>
+                  {editingId ? 'Update' : 'Save'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {loading ? (
+            <p style={{ fontSize: 14, color: '#6b7280' }}>Loading...</p>
+          ) : (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: 32 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <thead>
+                  <tr style={{ background: '#f9fafb' }}>
+                    <th style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Tool</th>
+                    <th style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Title</th>
+                    <th style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Type</th>
+                    <th style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Featured</th>
+                    <th style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Verified</th>
+                    <th style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #e5e7eb', width: 120 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item: any) => (
+                    <tr key={item.id}>
+                      <td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{item.tool_name}</td>
+                      <td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{item.deal_title}</td>
+                      <td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{item.deal_type}</td>
+                      <td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{item.is_featured ? 'Yes' : 'No'}</td>
+                      <td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{item.is_verified ? 'Yes' : 'No'}</td>
+                      <td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>
+                        <button onClick={() => handleEdit(item)} style={{ fontSize: 12, marginRight: 8, padding: '4px 8px', borderRadius: 4, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer' }}>Edit</button>
+                        <button onClick={() => handleDelete(item.id)} style={{ fontSize: 12, padding: '4px 8px', borderRadius: 4, border: '1px solid #e5e7eb', background: '#fff', color: '#dc2626', cursor: 'pointer' }}>Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {items.length === 0 && (
+                <p style={{ fontSize: 14, color: '#6b7280', textAlign: 'center', padding: '24px 0' }}>No deals found.</p>
+              )}
+            </div>
+          )}
+
+          {/* Pending Deals */}
+          <h3 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 16px' }}>Pending Deals</h3>
+          {pendingLoading ? (
+            <p style={{ fontSize: 14, color: '#6b7280' }}>Loading...</p>
+          ) : (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <thead>
+                  <tr style={{ background: '#f9fafb' }}>
+                    <th style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Tool</th>
+                    <th style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>URL</th>
+                    <th style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>Description</th>
+                    <th style={{ padding: 12, textAlign: 'left', borderBottom: '1px solid #e5e7eb', width: 160 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingDeals.map((pd) => (
+                    <tr key={pd.id}>
+                      <td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{pd.tool_name}</td>
+                      <td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>
+                        {pd.deal_url ? <a href={pd.deal_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1877F2', textDecoration: 'none' }}>Link</a> : '-'}
+                      </td>
+                      <td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>{pd.deal_description || '-'}</td>
+                      <td style={{ padding: 12, borderBottom: '1px solid #e5e7eb' }}>
+                        <button onClick={() => approvePendingDeal(pd)} style={{ fontSize: 12, marginRight: 8, padding: '4px 8px', borderRadius: 4, border: '1px solid #1877F2', background: '#E7F0FD', color: '#1877F2', cursor: 'pointer' }}>Approve</button>
+                        <button onClick={() => rejectPendingDeal(pd.id)} style={{ fontSize: 12, padding: '4px 8px', borderRadius: 4, border: '1px solid #e5e7eb', background: '#fff', color: '#dc2626', cursor: 'pointer' }}>Reject</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {pendingDeals.length === 0 && (
+                <p style={{ fontSize: 14, color: '#6b7280', textAlign: 'center', padding: '24px 0' }}>No pending deals.</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {activeTab === 'Newsletter' && (
         <div>

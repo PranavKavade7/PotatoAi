@@ -128,6 +128,7 @@ export default function ModelsPage() {
               <Link
                 key={model.id}
                 href={`/models/${model.id}`}
+                className="model-card"
                 style={{
                   display: 'block',
                   border: '1px solid #e5e7eb',

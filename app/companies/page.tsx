@@ -27,6 +27,7 @@ export default async function CompaniesPage() {
           <Link
             key={company.id}
             href={`/companies/${company.id}`}
+            className="model-card"
             style={{
               display: 'block',
               border: '1px solid #e5e7eb',

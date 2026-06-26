@@ -80,3 +80,37 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Card hover effects */
+a[class*="card-hover"]:hover,
+.news-card:hover,
+.model-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.news-card,
+.model-card {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+/* Nav link hover */
+.nav-link {
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-link:hover {
+  background: #f3f4f6;
+  color: #1a1a1a;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus visible */
+*:focus-visible {
+  outline: 2px solid #1877F2;
+  outline-offset: 2px;
+}
